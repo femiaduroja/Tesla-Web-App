@@ -1,0 +1,50 @@
+node{
+  def mvnHome
+  mvnHome = tool 'Maven3.9.5'
+  stage('01. cloneCode') {
+  git "https://github.com/femiaduroja/Tesla-Web-App.git"
+  //sh "git clone https://github.com/femiaduroja/Tesla-Web-App"   //If Linux
+  //bat "git clone https://github.com/femiaduroja/Tesla-Web-App"  //If Windows
+  }
+  stage('02. Test&Build') {
+  withEnv(["MVN_HOME=$mvnHome"]) {
+  sh '"$MVN_HOME/bin/mvn" clean package'
+  //bat "${mavenHome}/bin/mvn clean package" //If Windows
+  }
+  }
+  stage('03. CodeQuality') {
+  withEnv(["MVN_HOME=$mvnHome"]) {
+  sh '"$MVN_HOME/bin/mvn" sonar:sonar'
+  //bat '"$MVN_HOME/bin/mvn" sonar:sonar' //If Windows
+  }
+  }
+    stage('04. UploadArtifacts') {
+  withEnv(["MVN_HOME=$mvnHome"]) {
+  sh '"$MVN_HOME/bin/mvn" deploy'
+  //bat '"$MVN_HOME/bin/mvn" deploy' //If Windows
+  }
+  }
+  stage('05. Deploy2UAT') {
+  sh "echo 'Deploy to UAT'  "
+  deploy adapters: [tomcat9(credentialsId: 'TomcatCredentials', path: '', url: 'http://172.31.26.165:8080')], contextPath: null, war: 'target/*war'
+  }
+  stage('06. ApprovalGate') {
+  sh "echo 'Set for review' "
+  timeout(time:5, unit:'DAYS') {
+  input message: 'Application set for deployment. Please review and approve.'
+  }
+  }
+  stage('07. Deploy2Production') {
+  sh "sleep 50"
+  deploy adapters: [tomcat9(credentialsId: 'TomcatCredentials', path: '', url: 'http://172.31.26.165:8080')], contextPath: null, war: 'target/*war'
+  }
+  stage('08. EmailNotification') {
+  emailext attachLog: true, body: '''Hi All,
+
+  Build has run. You are all required to check the build status before we proceed.
+
+  Kind regards,
+
+  DevOps Engineer''', recipientProviders: [buildUser(), contributor(), culprits(), developers(), brokenBuildSuspects(), upstreamDevelopers()], replyTo: 'femi.aduroja@gmail.com', subject: 'Check Build Status', to: 'femi.aduroja@gmail.com'
+  }
+}
